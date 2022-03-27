@@ -28,18 +28,17 @@ def init_state(comm: MPI.Comm, root: int = 0) -> dict:
 def body(comm: MPI.Comm, state: dict, root: int = 0) -> Status:
     rank = comm.Get_rank()
     while True:
-        countdown = state.get('countdown')
-        recv_data = comm.gather(countdown, root=root)
+        countdown = state.get('countdown', 0)
+        msg = comm.reduce(sendobj=countdown, op=MPI.MIN, root=root)
+
         if rank != root:
             state['countdown'] -= 1
             if countdown == -1:
                 return Status.stopped
         else:
-            for msg in recv_data:
-                if msg:
-                    state['counter'] += 1
-                    if msg == -1:
-                        return Status.interrupted
+            state['counter'] += comm.Get_size() - 1
+            if msg == -1:
+                return Status.interrupted
 
 
 @time
