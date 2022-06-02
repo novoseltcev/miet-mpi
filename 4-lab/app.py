@@ -6,15 +6,6 @@ from mpi4py import MPI
 from node import MPINode
 
 
-def init_state(node: MPINode):
-    if node.is_master:
-        read_task_queue(node)
-    node.share_state_with_slaves('poly_size')
-    node.set_state(
-        poly_type=define_poly_type(node.state['poly_size'])
-    )
-
-
 def read_task_queue(node: MPINode):
     queue = []
     with open('tasks.txt', 'r') as fd:
@@ -29,7 +20,7 @@ def read_task_queue(node: MPINode):
     )
 
 
-def define_poly_type(length: int) -> MPI.Datatype:
+def define_poly(length: int) -> MPI.Datatype:
     PolynomType = MPI.SINT64_T.Create_contiguous(count=length)
     PolynomType.Set_name('polynom')
     PolynomType.Commit()
@@ -89,10 +80,19 @@ def main(node: MPINode):
 
 if __name__ == '__main__':
     node = MPINode(comm=MPI.COMM_WORLD, root=0)
-    init_state(node)
+
+    if node.is_master:
+        read_task_queue(node)
+    node.share_state_with_slaves('poly_size')
+    node.set_state(poly_type=node.define_type([np.int32] * node.state['poly_size'], 2))
+
     if node.is_master:
         distribute_tasks(node)
-    node.run(main)
+
+    start_func_time = MPI.Wtime()
+    node.set_state(result=main(node))
+    node.set_state(runtime=MPI.Wtime() - start_func_time)
+
     print(f'Proc#{node.comm.Get_rank()} | {node.runtime=}')
     node.stop_slave()
     print(f'{node.exec_time=}')
