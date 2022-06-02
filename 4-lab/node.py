@@ -1,7 +1,7 @@
 import sys
-from typing import Callable
 
 from mpi4py import MPI
+import numpy as np
 
 
 class MPINode:
@@ -53,11 +53,19 @@ class MPINode:
         if self.is_slave:
             sys.exit(code)
 
-    def run(self, func: Callable, *args, **kwargs):
-        start_func_time = MPI.Wtime()
-        result = func(self, *args, **kwargs)
-        self.set_state(runtime=MPI.Wtime() - start_func_time)
-        self.set_state(result=result)
-
     def share_state_with_slaves(self, key):
         self.__state[key] = self.comm.bcast(self.state.get(key), root=self.root)
+
+    @staticmethod
+    def define_type(types: list, count: int):
+        mpi_types = {np.int32: MPI.INT, np.float64: MPI.DOUBLE}
+
+        names = [str(i) for i in range(len(types))]
+        dtypes = list(zip(names, types))
+        buffer = np.zeros(count, dtype=dtypes)
+
+        offsets = [buffer.dtype.fields[name][1] for name in names]
+
+        result = MPI.Datatype.Create_struct([1] * len(types), offsets, [mpi_types[dtype] for dtype in types])
+        result.Commit()
+        return result
